@@ -1,0 +1,11 @@
+{
+  "name": "function",
+  "version": "1.0.0",
+  "devDependencies": {
+    "aws-sdk": "~2"
+  },
+  "dependencies": {
+    "amazon-cognito-identity-js": "^3.2.1",
+    "node-fetch": "^2.6.0"
+  }
+}

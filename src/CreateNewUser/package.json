@@ -1,0 +1,12 @@
+{
+  "name": "function",
+  "version": "1.0.0",
+  "devDependencies": {
+    "aws-sdk": "~2"
+  },
+  "dependencies": {
+    "@hapi/joi": "^16.1.8",
+    "luxon": "^1.21.3",
+    "password-generator": "^2.2.3"
+  }
+}
