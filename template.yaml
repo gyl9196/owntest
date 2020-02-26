@@ -270,8 +270,6 @@ Resources:
                 type: aws_proxy
                 uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CheckSession.Arn}/invocations
               responses: {}
-        x-amazon-apigateway-policy:
-          Version: 2012-10-17
       EndpointConfiguration: REGIONAL
       TracingEnabled: true
       Cors:
@@ -824,45 +822,6 @@ Resources:
     Properties:
       RouteTableId: !Ref VirtualNetworkPublicSubnetsRouteTable
       SubnetId: !Ref VirtualNetworkPublicSubnet2
-  VirtualNetworkDynamoDBEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      RouteTableIds:
-        - !Ref VirtualNetworkPublicSubnetsRouteTable
-        - !Ref VirtualNetworkPrivateSubnet1RouteTable
-        - !Ref VirtualNetworkPrivateSubnet2RouteTable
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.dynamodb
-      VpcEndpointType: Gateway
-      VpcId: !Ref VirtualNetwork
-  Api2:
-    Type: AWS::Serverless::Api
-    Properties:
-      Name: !Sub
-        - ${ResourceName} From Stack ${StackTagName} Environment ${EnvironmentTagName}
-        - ResourceName: Api2
-      StageName: !Ref EnvironmentAPIGatewayStageName
-      DefinitionBody:
-        swagger: '2.0'
-        info: {}
-        paths:
-          /:
-            get:
-              responses: {}
-        x-amazon-apigateway-policy:
-          Statement:
-            - Effect: Allow
-              Principal: '*'
-              Action: execute-api:Invoke
-              Resource: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:*
-              Condition:
-                StringEquals:
-                  aws:SourceVpc: !Ref VirtualNetwork
-          Version: 2012-10-17
-      EndpointConfiguration: PRIVATE
-      TracingEnabled: true
-      Cors:
-        AllowHeaders: '''Authorization,Content-Type'''
-        AllowOrigin: '''*'''
   VirtualNetworkAPIGatewayEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -888,6 +847,240 @@ Resources:
           IpProtocol: tcp
           ToPort: 443
       VpcId: !Ref VirtualNetwork
+  APItest:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub
+        - ${ResourceName} From Stack ${StackTagName} Environment ${EnvironmentTagName}
+        - ResourceName: APItest
+      StageName: !Ref EnvironmentAPIGatewayStageName
+      DefinitionBody:
+        swagger: '2.0'
+        info: {}
+        paths:
+          /test:
+            get:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${test.Arn}/invocations
+              responses: {}
+        x-amazon-apigateway-policy:
+          Statement:
+            - Effect: Allow
+              Principal: '*'
+              Action: execute-api:Invoke
+              Resource: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:*
+              Condition:
+                StringEquals:
+                  aws:SourceVpc: !Ref VirtualNetwork
+          Version: 2012-10-17
+      EndpointConfiguration: PRIVATE
+      TracingEnabled: true
+      Cors:
+        AllowHeaders: '''Authorization,Content-Type'''
+        AllowOrigin: '''*'''
+  APISecond:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub
+        - ${ResourceName} From Stack ${StackTagName} Environment ${EnvironmentTagName}
+        - ResourceName: APItest
+      StageName: !Ref EnvironmentAPIGatewayStageName
+      DefinitionBody:
+        swagger: '2.0'
+        info: {}
+        paths:
+          /test:
+            get:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${test2.Arn}/invocations
+              responses: {}
+        x-amazon-apigateway-policy:
+          Statement:
+            - Effect: Allow
+              Principal: '*'
+              Action: execute-api:Invoke
+              Resource: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:*
+              Condition:
+                StringEquals:
+                  aws:SourceVpc: !Ref VirtualNetwork
+          Version: 2012-10-17
+      EndpointConfiguration: PRIVATE
+      TracingEnabled: true
+      Cors:
+        AllowHeaders: '''Authorization,Content-Type'''
+        AllowOrigin: '''*'''
+  test:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-test
+      Description: !Sub
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: test
+      CodeUri: src/Function
+      Handler: index.handler
+      Runtime: nodejs10.x
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Policies:
+        - AWSXrayWriteOnlyAccess
+        - AWSLambdaENIManagementAccess
+        - DynamoDBCrudPolicy:
+            TableName: !Ref Table
+      Events:
+        APItestGETtest:
+          Type: Api
+          Properties:
+            Path: /test
+            Method: GET
+            RestApiId: !Ref APItest
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt VirtualNetwork.DefaultSecurityGroup
+        SubnetIds:
+          - !Ref VirtualNetworkPrivateSubnet1
+          - !Ref VirtualNetworkPrivateSubnet2
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref Table
+          TABLE_ARN: !GetAtt Table.Arn
+  Api2:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub
+        - ${ResourceName} From Stack ${StackTagName} Environment ${EnvironmentTagName}
+        - ResourceName: Api2
+      StageName: !Ref EnvironmentAPIGatewayStageName
+      DefinitionBody:
+        swagger: '2.0'
+        info: {}
+        paths:
+          /user/sayHello:
+            post:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${callPrivate.Arn}/invocations
+              responses: {}
+          /user/sayBye:
+            get:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${sayBye.Arn}/invocations
+              responses: {}
+      EndpointConfiguration: REGIONAL
+      TracingEnabled: true
+  callPrivate:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-callPrivate
+      Description: !Sub
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: callPrivate
+      CodeUri: src/callPrivate
+      Handler: index.handler
+      Runtime: nodejs10.x
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Policies:
+        - AWSXrayWriteOnlyAccess
+        - AWSLambdaENIManagementAccess
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt VirtualNetwork.DefaultSecurityGroup
+        SubnetIds:
+          - !Ref VirtualNetworkPrivateSubnet1
+          - !Ref VirtualNetworkPrivateSubnet2
+      Events:
+        Api2POSTusersayHello:
+          Type: Api
+          Properties:
+            Path: /user/sayHello
+            Method: POST
+            RestApiId: !Ref Api2
+  Table:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      TableName: !Sub ${AWS::StackName}-Table
+  sayBye:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-sayBye
+      Description: !Sub
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: sayBye
+      CodeUri: src/sayBye
+      Handler: index.handler
+      Runtime: nodejs10.x
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Policies:
+        - AWSXrayWriteOnlyAccess
+        - AWSLambdaENIManagementAccess
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt VirtualNetwork.DefaultSecurityGroup
+        SubnetIds:
+          - !Ref VirtualNetworkPrivateSubnet1
+          - !Ref VirtualNetworkPrivateSubnet2
+      Events:
+        Api2GETusersayBye:
+          Type: Api
+          Properties:
+            Path: /user/sayBye
+            Method: GET
+            RestApiId: !Ref Api2
+      Environment:
+        Variables:
+          API_URL: !Sub https://${APISecond}.execute-api.${AWS::Region}.amazonaws.com/${APISecond.Stage}
+  test2:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-test2
+      Description: !Sub
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: test2
+      CodeUri: src/test2
+      Handler: index.handler
+      Runtime: nodejs10.x
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Policies:
+        - AWSXrayWriteOnlyAccess
+        - AWSLambdaENIManagementAccess
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt VirtualNetwork.DefaultSecurityGroup
+        SubnetIds:
+          - !Ref VirtualNetworkPrivateSubnet1
+          - !Ref VirtualNetworkPrivateSubnet2
+      Events:
+        APISecondGETtest:
+          Type: Api
+          Properties:
+            Path: /test
+            Method: GET
+            RestApiId: !Ref APISecond
+      Environment:
+        Variables:
+          API_URL: !Sub https://${APItest}.execute-api.${AWS::Region}.amazonaws.com/${APItest.Stage}
 Parameters:
   StackTagName:
     Type: String

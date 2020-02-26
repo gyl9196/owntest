@@ -1,0 +1,1243 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Outputs:
+  DeploymentHistoryTag:
+    Description: Stackery Deployment History Tag
+    Value: A8Y9AU
+Parameters:
+  EnvironmentAPIGatewayStageName:
+    Default: Dev
+    Description: Environment name used for API Gateway Stage names (injected by Stackery
+      at deployment time)
+    Type: String
+  EnvironmentTagName:
+    Default: Dev
+    Description: Environment Name (injected by Stackery at deployment time)
+    Type: String
+  StackTagName:
+    Default: Dev
+    Description: Stack Name (injected by Stackery at deployment time)
+    Type: String
+Resources:
+  APItest:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      Cors:
+        AllowHeaders: '''Authorization,Content-Type'''
+        AllowOrigin: '''*'''
+      DefinitionBody:
+        info: {}
+        paths:
+          /test:
+            get:
+              responses: {}
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${test.Arn}/invocations
+        swagger: '2.0'
+        x-amazon-apigateway-policy:
+          Statement:
+          - Action: execute-api:Invoke
+            Condition:
+              StringEquals:
+                aws:SourceVpc:
+                  Ref: VirtualNetwork
+            Effect: Allow
+            Principal: '*'
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:*
+          Version: '2012-10-17'
+      EndpointConfiguration: PRIVATE
+      Name:
+        Fn::Sub:
+        - ${ResourceName} From Stack ${StackTagName} Environment ${EnvironmentTagName}
+        - ResourceName: APItest
+      StageName:
+        Ref: EnvironmentAPIGatewayStageName
+      TracingEnabled: true
+    Type: AWS::Serverless::Api
+  Api:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      Auth:
+        Authorizers:
+          DevTest:
+            UserPoolArn:
+              Fn::GetAtt:
+              - UserPool
+              - Arn
+      Cors:
+        AllowHeaders: '''Authorization,Content-Type'''
+        AllowOrigin: '''*'''
+      DefinitionBody:
+        info: {}
+        paths:
+          /profile:
+            get:
+              responses: {}
+              security:
+              - DevTest: []
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetUserProfile.Arn}/invocations
+        swagger: '2.0'
+      EndpointConfiguration: PRIVATE
+      Name:
+        Fn::Sub:
+        - ${ResourceName} From Stack ${StackTagName} Environment ${EnvironmentTagName}
+        - ResourceName: Api
+      StageName:
+        Ref: EnvironmentAPIGatewayStageName
+      TracingEnabled: true
+    Type: AWS::Serverless::Api
+  Api2:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      DefinitionBody:
+        info: {}
+        paths:
+          /user/sayHello:
+            post:
+              responses: {}
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${callPrivate.Arn}/invocations
+        swagger: '2.0'
+      EndpointConfiguration: REGIONAL
+      Name:
+        Fn::Sub:
+        - ${ResourceName} From Stack ${StackTagName} Environment ${EnvironmentTagName}
+        - ResourceName: Api2
+      StageName:
+        Ref: EnvironmentAPIGatewayStageName
+      TracingEnabled: true
+    Type: AWS::Serverless::Api
+  ChangePassword:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/9ed683dff73c119a8441731fdb98d8e3
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: ChangePassword
+      Environment:
+        Variables:
+          TABLE_ARN:
+            Fn::GetAtt:
+            - UserProfile
+            - Arn
+          TABLE_NAME:
+            Ref: UserProfile
+          USER_POOL_ARN:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+          USER_POOL_CLIENT_ID:
+            Ref: stackeryPool
+          USER_POOL_ID:
+            Ref: UserPool
+      Events:
+        PublicApiPOSTChangePssword:
+          Properties:
+            Method: POST
+            Path: /ChangePssword
+            RestApiId:
+              Ref: PublicApi
+          Type: Api
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-ChangePassword
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - Statement:
+        - Action:
+          - cognito-idp:Admin*
+          - cognito-idp:DescribeIdentityProvider
+          - cognito-idp:DescribeResourceServer
+          - cognito-idp:DescribeUserPool
+          - cognito-idp:DescribeUserPoolClient
+          - cognito-idp:DescribeUserPoolDomain
+          - cognito-idp:GetGroup
+          - cognito-idp:ListGroups
+          - cognito-idp:ListUserPoolClients
+          - cognito-idp:ListUsers
+          - cognito-idp:ListUsersInGroup
+          - cognito-idp:UpdateGroup
+          Effect: Allow
+          Resource:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: UserProfile
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+    Type: AWS::Serverless::Function
+  CheckSession:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/1fbd96e598a6d05f8cb0a621c2a5a7de
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: CheckSession
+      Environment:
+        Variables:
+          USER_POOL_ARN:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+          USER_POOL_CLIENT_ID:
+            Ref: stackeryPool
+          USER_POOL_ID:
+            Ref: UserPool
+      Events:
+        PublicApiPOSTCheckSession:
+          Properties:
+            Method: POST
+            Path: /CheckSession
+            RestApiId:
+              Ref: PublicApi
+          Type: Api
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-CheckSession
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - Statement:
+        - Action:
+          - cognito-idp:Admin*
+          - cognito-idp:DescribeIdentityProvider
+          - cognito-idp:DescribeResourceServer
+          - cognito-idp:DescribeUserPool
+          - cognito-idp:DescribeUserPoolClient
+          - cognito-idp:DescribeUserPoolDomain
+          - cognito-idp:GetGroup
+          - cognito-idp:ListGroups
+          - cognito-idp:ListUserPoolClients
+          - cognito-idp:ListUsers
+          - cognito-idp:ListUsersInGroup
+          - cognito-idp:UpdateGroup
+          Effect: Allow
+          Resource:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+    Type: AWS::Serverless::Function
+  ConfirmSignUp:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/394ec83b6c79bff81db628618cb7dbb5
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: ConfirmSignUp
+      Environment:
+        Variables:
+          USER_POOL_ARN:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+          USER_POOL_CLIENT_ID:
+            Ref: stackeryPool
+          USER_POOL_ID:
+            Ref: UserPool
+      Events:
+        PublicApiPOSTConfirmSignUp:
+          Properties:
+            Method: POST
+            Path: /ConfirmSignUp
+            RestApiId:
+              Ref: PublicApi
+          Type: Api
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-ConfirmSignUp
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - Statement:
+        - Action:
+          - cognito-idp:Admin*
+          - cognito-idp:DescribeIdentityProvider
+          - cognito-idp:DescribeResourceServer
+          - cognito-idp:DescribeUserPool
+          - cognito-idp:DescribeUserPoolClient
+          - cognito-idp:DescribeUserPoolDomain
+          - cognito-idp:GetGroup
+          - cognito-idp:ListGroups
+          - cognito-idp:ListUserPoolClients
+          - cognito-idp:ListUsers
+          - cognito-idp:ListUsersInGroup
+          - cognito-idp:UpdateGroup
+          Effect: Allow
+          Resource:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+    Type: AWS::Serverless::Function
+  CreateNewUser:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/cb04b2ec0d3915e79edf0e48d3403ce6
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: CreateNewUser
+      Environment:
+        Variables:
+          TABLE_ARN:
+            Fn::GetAtt:
+            - UserProfile
+            - Arn
+          TABLE_NAME:
+            Ref: UserProfile
+          USER_POOL_ARN:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+          USER_POOL_CLIENT_ID:
+            Ref: stackeryPool
+          USER_POOL_ID:
+            Ref: UserPool
+      Events:
+        PublicApiPOSTSignUp:
+          Properties:
+            Method: POST
+            Path: /SignUp
+            RestApiId:
+              Ref: PublicApi
+          Type: Api
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-CreateNewUser
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - Statement:
+        - Action:
+          - cognito-idp:Admin*
+          - cognito-idp:DescribeIdentityProvider
+          - cognito-idp:DescribeResourceServer
+          - cognito-idp:DescribeUserPool
+          - cognito-idp:DescribeUserPoolClient
+          - cognito-idp:DescribeUserPoolDomain
+          - cognito-idp:GetGroup
+          - cognito-idp:ListGroups
+          - cognito-idp:ListUserPoolClients
+          - cognito-idp:ListUsers
+          - cognito-idp:ListUsersInGroup
+          - cognito-idp:UpdateGroup
+          Effect: Allow
+          Resource:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: UserProfile
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+    Type: AWS::Serverless::Function
+  DeploymentMarkerTagA8Y9AU:
+    Type: AWS::CloudFormation::WaitConditionHandle
+  ForgetPassword:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/6fbb2917ef2d651183314cea12e68d99
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: ForgetPassword
+      Environment:
+        Variables:
+          USER_POOL_ARN:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+          USER_POOL_CLIENT_ID:
+            Ref: stackeryPool
+          USER_POOL_ID:
+            Ref: UserPool
+      Events:
+        PublicApiPOSTForgetPassword:
+          Properties:
+            Method: POST
+            Path: /ForgetPassword
+            RestApiId:
+              Ref: PublicApi
+          Type: Api
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-ForgetPassword
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - Statement:
+        - Action:
+          - cognito-idp:Admin*
+          - cognito-idp:DescribeIdentityProvider
+          - cognito-idp:DescribeResourceServer
+          - cognito-idp:DescribeUserPool
+          - cognito-idp:DescribeUserPoolClient
+          - cognito-idp:DescribeUserPoolDomain
+          - cognito-idp:GetGroup
+          - cognito-idp:ListGroups
+          - cognito-idp:ListUserPoolClients
+          - cognito-idp:ListUsers
+          - cognito-idp:ListUsersInGroup
+          - cognito-idp:UpdateGroup
+          Effect: Allow
+          Resource:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+    Type: AWS::Serverless::Function
+  GetUserProfile:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/52c48d6de0b9c02cb62ea5c0721c3016
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: GetUserProfile
+      Environment:
+        Variables:
+          TABLE_ARN:
+            Fn::GetAtt:
+            - UserProfile
+            - Arn
+          TABLE_NAME:
+            Ref: UserProfile
+      Events:
+        ApiGETprofile:
+          Properties:
+            Method: GET
+            Path: /profile
+            RestApiId:
+              Ref: Api
+          Type: Api
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-GetUserProfile
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: UserProfile
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+    Type: AWS::Serverless::Function
+  OnCustomMessage:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/3c8ff1b822fc5992a01dd96d9543ced0
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: OnCustomMessage
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-OnCustomMessage
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+    Type: AWS::Serverless::Function
+  PublicApi:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      Cors:
+        AllowHeaders: '''Authorization,Content-Type'''
+        AllowOrigin: '''*'''
+      DefinitionBody:
+        info: {}
+        paths:
+          /ChangePssword:
+            post:
+              responses: {}
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ChangePassword.Arn}/invocations
+          /CheckSession:
+            post:
+              responses: {}
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CheckSession.Arn}/invocations
+          /ConfirmSignUp:
+            post:
+              responses: {}
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ConfirmSignUp.Arn}/invocations
+          /ForgetPassword:
+            post:
+              responses: {}
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ForgetPassword.Arn}/invocations
+          /RefreshToken:
+            post:
+              responses: {}
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${RefreshToken.Arn}/invocations
+          /ResendEmailActivation:
+            post:
+              responses: {}
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ResendEmailActivation.Arn}/invocations
+          /ResetPassword:
+            post:
+              responses: {}
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ResetPassword.Arn}/invocations
+          /SignIn:
+            post:
+              responses: {}
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SignIn.Arn}/invocations
+          /SignUp:
+            post:
+              responses: {}
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateNewUser.Arn}/invocations
+        swagger: '2.0'
+      EndpointConfiguration: REGIONAL
+      Name:
+        Fn::Sub:
+        - ${ResourceName} From Stack ${StackTagName} Environment ${EnvironmentTagName}
+        - ResourceName: PublicApi
+      StageName:
+        Ref: EnvironmentAPIGatewayStageName
+      TracingEnabled: true
+    Type: AWS::Serverless::Api
+  RefreshToken:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/a1d7c66970480c1c5c2989ede56635eb
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: RefreshToken
+      Environment:
+        Variables:
+          USER_POOL_ARN:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+          USER_POOL_CLIENT_ID:
+            Ref: stackeryPool
+          USER_POOL_ID:
+            Ref: UserPool
+      Events:
+        PublicApiPOSTRefreshToken:
+          Properties:
+            Method: POST
+            Path: /RefreshToken
+            RestApiId:
+              Ref: PublicApi
+          Type: Api
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-RefreshToken
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - Statement:
+        - Action:
+          - cognito-idp:Admin*
+          - cognito-idp:DescribeIdentityProvider
+          - cognito-idp:DescribeResourceServer
+          - cognito-idp:DescribeUserPool
+          - cognito-idp:DescribeUserPoolClient
+          - cognito-idp:DescribeUserPoolDomain
+          - cognito-idp:GetGroup
+          - cognito-idp:ListGroups
+          - cognito-idp:ListUserPoolClients
+          - cognito-idp:ListUsers
+          - cognito-idp:ListUsersInGroup
+          - cognito-idp:UpdateGroup
+          Effect: Allow
+          Resource:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+    Type: AWS::Serverless::Function
+  ResendEmailActivation:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/49b70f57377d0877909df8d3ce5a3dcb
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: ResendEmailActivation
+      Environment:
+        Variables:
+          USER_POOL_ARN:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+          USER_POOL_CLIENT_ID:
+            Ref: stackeryPool
+          USER_POOL_ID:
+            Ref: UserPool
+      Events:
+        PublicApiPOSTResendEmailActivation:
+          Properties:
+            Method: POST
+            Path: /ResendEmailActivation
+            RestApiId:
+              Ref: PublicApi
+          Type: Api
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-ResendEmailActivation
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - Statement:
+        - Action:
+          - cognito-idp:Admin*
+          - cognito-idp:DescribeIdentityProvider
+          - cognito-idp:DescribeResourceServer
+          - cognito-idp:DescribeUserPool
+          - cognito-idp:DescribeUserPoolClient
+          - cognito-idp:DescribeUserPoolDomain
+          - cognito-idp:GetGroup
+          - cognito-idp:ListGroups
+          - cognito-idp:ListUserPoolClients
+          - cognito-idp:ListUsers
+          - cognito-idp:ListUsersInGroup
+          - cognito-idp:UpdateGroup
+          Effect: Allow
+          Resource:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+    Type: AWS::Serverless::Function
+  ResetPassword:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/4d555d5c27a080f6b8b9a3880fd61ba8
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: ResetPassword
+      Environment:
+        Variables:
+          USER_POOL_ARN:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+          USER_POOL_CLIENT_ID:
+            Ref: stackeryPool
+          USER_POOL_ID:
+            Ref: UserPool
+      Events:
+        PublicApiPOSTResetPassword:
+          Properties:
+            Method: POST
+            Path: /ResetPassword
+            RestApiId:
+              Ref: PublicApi
+          Type: Api
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-ResetPassword
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - Statement:
+        - Action:
+          - cognito-idp:Admin*
+          - cognito-idp:DescribeIdentityProvider
+          - cognito-idp:DescribeResourceServer
+          - cognito-idp:DescribeUserPool
+          - cognito-idp:DescribeUserPoolClient
+          - cognito-idp:DescribeUserPoolDomain
+          - cognito-idp:GetGroup
+          - cognito-idp:ListGroups
+          - cognito-idp:ListUserPoolClients
+          - cognito-idp:ListUsers
+          - cognito-idp:ListUsersInGroup
+          - cognito-idp:UpdateGroup
+          Effect: Allow
+          Resource:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+    Type: AWS::Serverless::Function
+  SignIn:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/57d5897f568e92da746510280374b978
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: SignIn
+      Environment:
+        Variables:
+          USER_POOL_ARN:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+          USER_POOL_CLIENT_ID:
+            Ref: stackeryPool
+          USER_POOL_ID:
+            Ref: UserPool
+      Events:
+        PublicApiPOSTSignIn:
+          Properties:
+            Method: POST
+            Path: /SignIn
+            RestApiId:
+              Ref: PublicApi
+          Type: Api
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-SignIn
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - Statement:
+        - Action:
+          - cognito-idp:Admin*
+          - cognito-idp:DescribeIdentityProvider
+          - cognito-idp:DescribeResourceServer
+          - cognito-idp:DescribeUserPool
+          - cognito-idp:DescribeUserPoolClient
+          - cognito-idp:DescribeUserPoolDomain
+          - cognito-idp:GetGroup
+          - cognito-idp:ListGroups
+          - cognito-idp:ListUserPoolClients
+          - cognito-idp:ListUsers
+          - cognito-idp:ListUsersInGroup
+          - cognito-idp:UpdateGroup
+          Effect: Allow
+          Resource:
+            Fn::GetAtt:
+            - UserPool
+            - Arn
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+    Type: AWS::Serverless::Function
+  UserPool:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      AutoVerifiedAttributes:
+      - email
+      EmailConfiguration:
+        EmailSendingAccount: DEVELOPER
+        SourceArn: arn:aws:ses:us-east-1:773788008578:identity/yanlin96.gong@gmail.com
+      LambdaConfig:
+        CustomMessage:
+          Fn::GetAtt:
+          - OnCustomMessage
+          - Arn
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: false
+          RequireNumbers: false
+          RequireSymbols: false
+          RequireUppercase: false
+      UserPoolName:
+        Fn::Sub: ${AWS::StackName}-UserPool
+      UsernameAttributes:
+      - email
+    Type: AWS::Cognito::UserPool
+  UserPoolToOnCustomMessagePermission:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::GetAtt:
+        - OnCustomMessage
+        - Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+        - UserPool
+        - Arn
+    Type: AWS::Lambda::Permission
+  UserProfile:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      AttributeDefinitions:
+      - AttributeName: id
+        AttributeType: S
+      - AttributeName: firstName
+        AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+      - IndexName: firstName-index
+        KeySchema:
+        - AttributeName: firstName
+          KeyType: HASH
+        Projection:
+          ProjectionType: ALL
+      KeySchema:
+      - AttributeName: id
+        KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      TableName:
+        Fn::Sub: ${AWS::StackName}-UserProfile
+    Type: AWS::DynamoDB::Table
+  VirtualNetwork:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - Stack ${StackTagName} Environment ${EnvironmentTagName} Virtual Network
+            ${ResourceName}
+          - ResourceName: VirtualNetwork
+    Type: AWS::EC2::VPC
+  VirtualNetworkAPIGatewayEndpoint:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+      - Ref: VirtualNetworkAPIGatewayEndpointSecurityGroup
+      ServiceName:
+        Fn::Sub: com.amazonaws.${AWS::Region}.execute-api
+      SubnetIds:
+      - Ref: VirtualNetworkPrivateSubnet1
+      - Ref: VirtualNetworkPrivateSubnet2
+      VpcEndpointType: Interface
+      VpcId:
+        Ref: VirtualNetwork
+    Type: AWS::EC2::VPCEndpoint
+  VirtualNetworkAPIGatewayEndpointSecurityGroup:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      GroupDescription:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Virtual Network
+          ${ResourceName} Private API Gateway Access
+        - ResourceName: VirtualNetwork
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        Description: Access API Gateway From VPC
+        FromPort: 443
+        IpProtocol: tcp
+        ToPort: 443
+      VpcId:
+        Ref: VirtualNetwork
+    Type: AWS::EC2::SecurityGroup
+  VirtualNetworkPrivateSubnet1:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs: ''
+      CidrBlock:
+        Fn::Select:
+        - 0
+        - Fn::Cidr:
+          - 10.0.0.0/16
+          - 4
+          - 14
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - Stack ${StackTagName} Environment ${EnvironmentTagName} Virtual Network
+            ${ResourceName} Private Subnet 1
+          - ResourceName: VirtualNetwork
+      VpcId:
+        Ref: VirtualNetwork
+    Type: AWS::EC2::Subnet
+  VirtualNetworkPrivateSubnet1NatGateway:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - VirtualNetworkPrivateSubnet1NatGatewayEIP
+        - AllocationId
+      SubnetId:
+        Ref: VirtualNetworkPublicSubnet1
+    Type: AWS::EC2::NatGateway
+  VirtualNetworkPrivateSubnet1NatGatewayEIP:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      Domain: vpc
+    Type: AWS::EC2::EIP
+  VirtualNetworkPrivateSubnet1NatGatewayRoute:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: VirtualNetworkPrivateSubnet1NatGateway
+      RouteTableId:
+        Ref: VirtualNetworkPrivateSubnet1RouteTable
+    Type: AWS::EC2::Route
+  VirtualNetworkPrivateSubnet1RouteTable:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - Stack ${StackTagName} Environment ${EnvironmentTagName} Virtual Network
+            ${ResourceName} Private Subnet 1 Route Table
+          - ResourceName: VirtualNetwork
+      VpcId:
+        Ref: VirtualNetwork
+    Type: AWS::EC2::RouteTable
+  VirtualNetworkPrivateSubnet1RouteTableAssociation:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      RouteTableId:
+        Ref: VirtualNetworkPrivateSubnet1RouteTable
+      SubnetId:
+        Ref: VirtualNetworkPrivateSubnet1
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  VirtualNetworkPrivateSubnet2:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+        - 1
+        - Fn::GetAZs: ''
+      CidrBlock:
+        Fn::Select:
+        - 1
+        - Fn::Cidr:
+          - 10.0.0.0/16
+          - 4
+          - 14
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - Stack ${StackTagName} Environment ${EnvironmentTagName} Virtual Network
+            ${ResourceName} Private Subnet 2
+          - ResourceName: VirtualNetwork
+      VpcId:
+        Ref: VirtualNetwork
+    Type: AWS::EC2::Subnet
+  VirtualNetworkPrivateSubnet2NatGateway:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - VirtualNetworkPrivateSubnet2NatGatewayEIP
+        - AllocationId
+      SubnetId:
+        Ref: VirtualNetworkPublicSubnet2
+    Type: AWS::EC2::NatGateway
+  VirtualNetworkPrivateSubnet2NatGatewayEIP:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      Domain: vpc
+    Type: AWS::EC2::EIP
+  VirtualNetworkPrivateSubnet2NatGatewayRoute:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: VirtualNetworkPrivateSubnet2NatGateway
+      RouteTableId:
+        Ref: VirtualNetworkPrivateSubnet2RouteTable
+    Type: AWS::EC2::Route
+  VirtualNetworkPrivateSubnet2RouteTable:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - Stack ${StackTagName} Environment ${EnvironmentTagName} Virtual Network
+            ${ResourceName} Private Subnet 2 Route Table
+          - ResourceName: VirtualNetwork
+      VpcId:
+        Ref: VirtualNetwork
+    Type: AWS::EC2::RouteTable
+  VirtualNetworkPrivateSubnet2RouteTableAssociation:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      RouteTableId:
+        Ref: VirtualNetworkPrivateSubnet2RouteTable
+      SubnetId:
+        Ref: VirtualNetworkPrivateSubnet2
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  VirtualNetworkPublicSubnet1:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs: ''
+      CidrBlock:
+        Fn::Select:
+        - 2
+        - Fn::Cidr:
+          - 10.0.0.0/16
+          - 4
+          - 14
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - Stack ${StackTagName} Environment ${EnvironmentTagName} Virtual Network
+            ${ResourceName} Public Subnet 1
+          - ResourceName: VirtualNetwork
+      VpcId:
+        Ref: VirtualNetwork
+    Type: AWS::EC2::Subnet
+  VirtualNetworkPublicSubnet1RouteTableAssociation:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      RouteTableId:
+        Ref: VirtualNetworkPublicSubnetsRouteTable
+      SubnetId:
+        Ref: VirtualNetworkPublicSubnet1
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  VirtualNetworkPublicSubnet2:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+        - 1
+        - Fn::GetAZs: ''
+      CidrBlock:
+        Fn::Select:
+        - 3
+        - Fn::Cidr:
+          - 10.0.0.0/16
+          - 4
+          - 14
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - Stack ${StackTagName} Environment ${EnvironmentTagName} Virtual Network
+            ${ResourceName} Public Subnet 2
+          - ResourceName: VirtualNetwork
+      VpcId:
+        Ref: VirtualNetwork
+    Type: AWS::EC2::Subnet
+  VirtualNetworkPublicSubnet2RouteTableAssociation:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      RouteTableId:
+        Ref: VirtualNetworkPublicSubnetsRouteTable
+      SubnetId:
+        Ref: VirtualNetworkPublicSubnet2
+    Type: AWS::EC2::SubnetRouteTableAssociation
+  VirtualNetworkPublicSubnetsInternetGateway:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - Stack ${StackTagName} Environment ${EnvironmentTagName} Virtual Network
+            ${ResourceName} Public Subnets Internet Gateway
+          - ResourceName: VirtualNetwork
+    Type: AWS::EC2::InternetGateway
+  VirtualNetworkPublicSubnetsInternetGatewayAttachment:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      InternetGatewayId:
+        Ref: VirtualNetworkPublicSubnetsInternetGateway
+      VpcId:
+        Ref: VirtualNetwork
+    Type: AWS::EC2::VPCGatewayAttachment
+  VirtualNetworkPublicSubnetsInternetGatewayRoute:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: VirtualNetworkPublicSubnetsInternetGateway
+      RouteTableId:
+        Ref: VirtualNetworkPublicSubnetsRouteTable
+    Type: AWS::EC2::Route
+  VirtualNetworkPublicSubnetsRouteTable:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Metadata:
+      StackeryManaged: true
+    Properties:
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - Stack ${StackTagName} Environment ${EnvironmentTagName} Virtual Network
+            ${ResourceName} Public Subnets Route Table
+          - ResourceName: VirtualNetwork
+      VpcId:
+        Ref: VirtualNetwork
+    Type: AWS::EC2::RouteTable
+  callPrivate:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/b22f788e226bea3cdce7661b25d6c6bc
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: callPrivate
+      Events:
+        Api2POSTusersayHello:
+          Properties:
+            Method: POST
+            Path: /user/sayHello
+            RestApiId:
+              Ref: Api2
+          Type: Api
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-callPrivate
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      - AWSLambdaENIManagementAccess
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+      VpcConfig:
+        SecurityGroupIds:
+        - Fn::GetAtt:
+          - VirtualNetwork
+          - DefaultSecurityGroup
+        SubnetIds:
+        - Ref: VirtualNetworkPrivateSubnet1
+        - Ref: VirtualNetworkPrivateSubnet2
+    Type: AWS::Serverless::Function
+  stackeryPool:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      UserPoolId:
+        Ref: UserPool
+    Type: AWS::Cognito::UserPoolClient
+  test:
+    DependsOn: DeploymentMarkerTagA8Y9AU
+    Properties:
+      CodeUri: s3://stackery-assetsbucket-ho7ivkjddl1t/deployments/Dev/Dev/functions/0068f6bcaa6f9bde09e773362afec357
+      Description:
+        Fn::Sub:
+        - Stack ${StackTagName} Environment ${EnvironmentTagName} Function ${ResourceName}
+        - ResourceName: test
+      Events:
+        APItestGETtest:
+          Properties:
+            Method: GET
+            Path: /test
+            RestApiId:
+              Ref: APItest
+          Type: Api
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-test
+      Handler: index.handler
+      MemorySize: 3008
+      Policies:
+      - AWSXrayWriteOnlyAccess
+      Runtime: nodejs10.x
+      Timeout: 30
+      Tracing: Active
+    Type: AWS::Serverless::Function
+Transform: AWS::Serverless-2016-10-31
