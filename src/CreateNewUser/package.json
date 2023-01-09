@@ -6,7 +6,7 @@
   },
   "dependencies": {
     "@hapi/joi": "^16.1.8",
-    "luxon": "^1.21.3",
+    "luxon": "^2.5.2",
     "password-generator": "^2.2.3"
   }
 }
